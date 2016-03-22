@@ -1,0 +1,18 @@
+#!/bin/bash
+
+docker_registry='https://url-to-the-registry'
+cert_dir='/etc/docker/certs.d/cert-n-key-dir'
+docker_pull_from=$(basename $docker_registry)
+curl='curl -s --cert ./dockerclient.cert --key ./dockerclient.key'
+
+cd $cert_dir
+for i in `$curl  "$docker_registry/v1/search"|jq -r ".results[].name" `
+do 
+  n=$(basename $i)
+  for j in `$curl "$docker_registry"/v1/repositories/$i/tags| jq -r 'keys|.[]'`
+  do 
+    echo "--- Pulling $docker_registry/$n:$j ---"
+    docker pull "$docker_pull_from/$n:$j"
+  done
+done
+
