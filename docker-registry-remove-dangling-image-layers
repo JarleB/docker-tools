@@ -41,7 +41,7 @@ foreach my $i (@{$repos->{'results'}} ) {
     }
 }
 
-if ( $referenced_layers->size < 1000 ) {
+if ( $referenced_layers->size < 10 ) {
   print "The set of referenced layers is < 10\n";
   print "That is abnormal, so bailing instead of \n";
   print "possibly removing layers by mistake.\n";
