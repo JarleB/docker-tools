@@ -1,0 +1,82 @@
+#!/usr/bin/perl 
+#
+# Script for removing unreference image layers from local file-storage of
+# docker-registry server (old python version, v1 API)
+
+use strict;
+use warnings;
+
+use JSON;
+use LWP::UserAgent;
+use Carp;
+#use Data::Dumper;
+use Set::Scalar;
+use File::Path qw(remove_tree);
+
+my $image_dir = '/site/docker-registry/images'; # The file-storage image directory
+my $refcounts = ();
+my $tagnames = ();
+my $referenced_layers = Set::Scalar->new;
+my $layers_on_disk = Set::Scalar->new;
+my $repos = reg_api_v1('get','search');
+
+# Read image layer directories from disk local file storage
+#
+opendir(my $dh, $image_dir) or croak "cant opendir $image_dir ";
+while(readdir $dh) {
+  next if /^\./; # skip . and .. 
+  $layers_on_disk->insert($_);
+}
+closedir $dh;
+
+foreach my $i (@{$repos->{'results'}} ) {
+  my $name = $i->{'name'};
+  my $tags = reg_api_v1('get',"repositories/$name/tags");
+    foreach my $tagname (keys %{$tags}) {
+      my $image = $tags->{$tagname};
+#      $refcounts->{$image}++; # Maybe for later use 
+#      $tagnames->{$image} = "$name/$tagname";
+      $referenced_layers->insert($image);
+      recurse_layers($image);
+    }
+}
+
+my $diff = $layers_on_disk->difference($referenced_layers);
+
+while (defined(my $e = $diff->each)) { 
+ print "Removing $image_dir/$e\n";
+ remove_tree("$image_dir/$e") if -d "$image_dir/$e";
+}
+
+# Nest all layers until base layer is reached 
+sub recurse_layers {
+  my $top_layer = shift;
+  my $manifest = reg_api_v1('get',"images/$top_layer/json");
+  if ( $manifest->{'parent'} && $manifest->{'parent'} ne '') {
+   my $parent = $manifest->{'parent'};
+   $refcounts->{$parent}++;
+   $referenced_layers->insert($parent);
+   recurse_layers($parent);
+  }
+}
+
+# API wrapper
+sub reg_api_v1 {
+  my $method = uc shift; 
+  my $endpoint = shift; 
+  my $json = shift;
+  my $req = HTTP::Request->new($method,"http://localhost:5000/v1/$endpoint");
+  $req->header('Content-Type' => 'application/json');
+  $req->content($json) if $json;
+  my $ua = LWP::UserAgent->new;
+  my $resp = $ua->request($req);
+  my $status_line = $resp->status_line;
+  if ($status_line =~ /200/) {
+    my $data = $resp->decoded_content;
+    my $result = decode_json($data);
+    return $result;
+  } else {
+    print "Error: $status_line \n"
+  }
+}
+
