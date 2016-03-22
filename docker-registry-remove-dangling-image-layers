@@ -41,6 +41,13 @@ foreach my $i (@{$repos->{'results'}} ) {
     }
 }
 
+if ( $referenced_layers->size < 1000 ) {
+  print "The set of referenced layers is < 10\n";
+  print "That is abnormal, so bailing instead of \n";
+  print "possibly removing layers by mistake.\n";
+  exit 1;
+}
+
 my $diff = $layers_on_disk->difference($referenced_layers);
 
 while (defined(my $e = $diff->each)) { 
@@ -76,7 +83,8 @@ sub reg_api_v1 {
     my $result = decode_json($data);
     return $result;
   } else {
-    print "Error: $status_line \n"
+    print "Error: $status_line \n";
+    exit 1; 
   }
 }
 
